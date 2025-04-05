@@ -3,8 +3,9 @@ import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
 import axios from 'axios';
 import { addDays } from 'date-fns';
 
-// API Configuration
-const WEATHER_API_KEY = process.env.NEXT_PUBLIC_OPENWEATHER_API_KEY;
+// You're using OpenWeather's variable name...
+const WEATHER_API_KEY = process.env.NEXT_PUBLIC_WEATHER_API_KEY;
+// ...but accessing WeatherAPI.com services
 const BASE_URL = 'https://api.weatherapi.com/v1';
 
 // Response Types
@@ -234,6 +235,7 @@ const weatherSlice = createSlice({
       })
       .addCase(fetchWeather.rejected, (state, action) => {
         state.loading = false;
+        console.log('Full API error:', action);  // More detailed logging
         state.error = action.payload as string || 'Unknown error occurred';
       })
       .addCase(fetchForecast.pending, (state) => {
