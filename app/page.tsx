@@ -1,113 +1,267 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState, useEffect } from 'react';
+
+// Use environment variables properly
+const WEATHER_API_KEY = process.env.NEXT_PUBLIC_WEATHER_API_KEY;
+const COINGECKO_API = process.env.
+NEXT_PUBLIC_COINGECKO_API_KEY;
+const NEWS_API_KEY = process.env.NEXT_PUBLIC_NEWSDATA_API_KEY;
+
+// Types with optional properties for safety
+type WeatherData = {
+  name?: string;
+  main?: { temp?: number };
+  weather?: { main?: string }[];
+};
+
+type CryptoData = {
+  id?: string;
+  name?: string;
+  current_price?: number;
+  price_change_percentage_24h?: number;
+}[];
+
+type NewsData = {
+  title?: string;
+  description?: string;
+  url?: string;
+}[];
+
+export default function RetroDashboard() {
+  const [activeTab, setActiveTab] = useState<'weather' | 'crypto' | 'news'>('weather');
+  const [weather, setWeather] = useState<WeatherData[]>([]);
+  const [crypto, setCrypto] = useState<CryptoData>([]);
+  const [news, setNews] = useState<NewsData>([]);
+  const [loading, setLoading] = useState({
+    weather: true,
+    crypto: true,
+    news: true
+  });
+  const [errors, setErrors] = useState<{
+    weather: string | null,
+    crypto: string | null,
+    news: string | null
+  }>({
+    weather: null,
+    crypto: null,
+    news: null
+  });
+
+  // Fetch Weather Data
+  useEffect(() => {
+    if (activeTab !== 'weather') return;
+    
+    // Reset state
+    setLoading(prev => ({ ...prev, weather: true }));
+    setErrors(prev => ({ ...prev, weather: null }));
+    
+    // Check if API key exists
+    if (!WEATHER_API_KEY) {
+      setErrors(prev => ({ ...prev, weather: "Weather API key not configured" }));
+      setLoading(prev => ({ ...prev, weather: false }));
+      return;
+    }
+    
+    const cities = ['New York', 'London', 'Tokyo'];
+    Promise.all(
+      cities.map(city =>
+        fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&units=imperial&appid=${WEATHER_API_KEY}`)
+          .then(res => {
+            if (!res.ok) throw new Error(`Weather API error: ${res.status}`);
+            return res.json();
+          })
+          .catch(error => {
+            console.error(`Error fetching weather for ${city}:`, error);
+            return { name: city, error: true };
+          })
+      )
+    )
+    .then(data => {
+      setWeather(data.filter(item => !item.error));
+      setLoading(prev => ({ ...prev, weather: false }));
+    })
+    .catch(error => {
+      console.error("Weather fetch error:", error);
+      setErrors(prev => ({ ...prev, weather: error.message }));
+      setLoading(prev => ({ ...prev, weather: false }));
+    });
+  }, [activeTab]);
+
+  // Fetch Crypto Data
+  useEffect(() => {
+    if (activeTab !== 'crypto') return;
+    
+    setLoading(prev => ({ ...prev, crypto: true }));
+    setErrors(prev => ({ ...prev, crypto: null }));
+
+    fetch(`${COINGECKO_API}/coins/markets?vs_currency=usd&ids=bitcoin,ethereum,dogecoin`)
+      .then(res => {
+        if (!res.ok) throw new Error(`CoinGecko API error: ${res.status}`);
+        return res.json();
+      })
+      .then(data => {
+        setCrypto(data);
+        setLoading(prev => ({ ...prev, crypto: false }));
+      })
+      .catch(error => {
+        console.error("Crypto fetch error:", error);
+        setErrors(prev => ({ ...prev, crypto: error.message }));
+        setLoading(prev => ({ ...prev, crypto: false }));
+      });
+  }, [activeTab]);
+
+  // Fetch News Data
+  useEffect(() => {
+    if (activeTab !== 'news') return;
+    
+    setLoading(prev => ({ ...prev, news: true }));
+    setErrors(prev => ({ ...prev, news: null }));
+    
+    // Check if API key exists
+    if (!NEWS_API_KEY) {
+      setErrors(prev => ({ ...prev, news: "News API key not configured" }));
+      setLoading(prev => ({ ...prev, news: false }));
+      return;
+    }
+
+    fetch(`https://newsapi.org/v2/top-headlines?country=us&apiKey=${NEWS_API_KEY}`)
+      .then(res => {
+        if (!res.ok) throw new Error(`News API error: ${res.status}`);
+        return res.json();
+      })
+      .then(data => {
+        setNews(data.articles?.slice(0, 3) || []);
+        setLoading(prev => ({ ...prev, news: false }));
+      })
+      .catch(error => {
+        console.error("News fetch error:", error);
+        setErrors(prev => ({ ...prev, news: error.message }));
+        setLoading(prev => ({ ...prev, news: false }));
+      });
+  }, [activeTab]);
+
+  // Tab Components with error handling
+  const WeatherTab = () => (
+    <div className="bg-yellow-50 p-6 border-2 border-black">
+      <h3 className="text-2xl font-bold mb-4">🌤️ WEATHER WIRE</h3>
+      {loading.weather ? (
+        <p className="text-center">📡 TUNING THE WEATHER SATELLITE...</p>
+      ) : errors.weather ? (
+        <p className="text-center text-red-600">⚠️ SATELLITE ERROR: {errors.weather}</p>
+      ) : weather.length === 0 ? (
+        <p className="text-center">NO WEATHER DATA AVAILABLE</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+          {weather.map((city, i) => (
+            <div key={i} className="bg-white p-3 border-2 border-black">
+              <h4 className="font-bold">{city.name || 'Unknown'}</h4>
+              <p>{city.weather?.[0]?.main || 'No data'}</p>
+              <p>🌡️ {city.main?.temp !== undefined ? Math.round(city.main.temp) : 'N/A'}°F</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const CryptoTab = () => (
+    <div className="bg-yellow-50 p-6 border-2 border-black">
+      <h3 className="text-2xl font-bold mb-4">💲 CRYPTO CHRONICLES</h3>
+      {loading.crypto ? (
+        <p className="text-center">⏳ MINING BLOCKCHAIN DATA...</p>
+      ) : errors.crypto ? (
+        <p className="text-center text-red-600">⚠️ BLOCKCHAIN ERROR: {errors.crypto}</p>
+      ) : crypto.length === 0 ? (
+        <p className="text-center">NO CRYPTO DATA AVAILABLE</p>
+      ) : (
+        <div className="space-y-3">
+          {crypto.map((coin, idx) => (
+            <div key={idx} className="flex justify-between border-b-2 border-dashed border-black pb-2">
+              <span className="font-bold">{coin.name?.toUpperCase() || 'Unknown'}</span>
+              <span>${coin.current_price?.toLocaleString() || 'N/A'}</span>
+              <span className={(coin.price_change_percentage_24h || 0) >= 0 ? 'text-green-700' : 'text-red-700'}>
+                {(coin.price_change_percentage_24h || 0) >= 0 ? '↑' : '↓'} {Math.abs(coin.price_change_percentage_24h || 0).toFixed(1)}%
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const NewsTab = () => (
+    <div className="bg-yellow-50 p-6 border-2 border-black">
+      <h3 className="text-2xl font-bold mb-4">📰 THE DAILY BUGLE</h3>
+      {loading.news ? (
+        <p className="text-center">🖨️ PRINTING HEADLINES...</p>
+      ) : errors.news ? (
+        <p className="text-center text-red-600">⚠️ PRINTING ERROR: {errors.news}</p>
+      ) : news.length === 0 ? (
+        <p className="text-center">NO NEWS ARTICLES AVAILABLE</p>
+      ) : (
+        <div className="space-y-4">
+          {news.map((article, i) => (
+            <div key={i} className="border-b-2 border-dashed border-black pb-2">
+              <p className="font-bold">BREAKING:</p>
+              <p>{article.title || 'No headline available'}</p>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  // Rest of the component remains the same
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:size-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
+    <div className="min-h-screen bg-amber-50 font-serif">
+      {/* Scan lines overlay */}
+      <div className="fixed inset-0 pointer-events-none" style={{
+        backgroundImage: 'linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px)',
+        backgroundSize: '100% 4px',
+      }}></div>
+
+      {/* Header */}
+      <header className="bg-red-700 text-white p-4 border-b-4 border-black">
+        <div className="container mx-auto">
+          <h1 className="text-4xl md:text-5xl font-bold text-center">
+            CRYPTOWEATHER <span className="text-yellow-300">NEXUS</span>
+          </h1>
+          <p className="text-center mt-2">YOUR DAILY DOSE OF DIGITAL & ATMOSPHERIC CHAOS</p>
+        </div>
+      </header>
+
+      {/* Tab Navigation */}
+      <div className="container mx-auto px-4 mt-8">
+        <div className="flex border-b-2 border-black">
+          {[
+            { id: 'weather', label: '🌤️ WEATHER' },
+            { id: 'crypto', label: '💲 CRYPTO' },
+            { id: 'news', label: '📰 NEWS' },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`px-6 py-3 font-bold ${activeTab === tab.id ? 'bg-yellow-300 border-t-2 border-l-2 border-r-2 border-black' : 'bg-yellow-100'}`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="relative z-[-1] flex place-items-center before:absolute before:h-[300px] before:w-full before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 sm:before:w-[480px] sm:after:w-[240px] before:lg:h-[360px]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
+      {/* Tab Content */}
+      <main className="container mx-auto px-4 py-8">
+        {activeTab === 'weather' && <WeatherTab />}
+        {activeTab === 'crypto' && <CryptoTab />}
+        {activeTab === 'news' && <NewsTab />}
+      </main>
 
-      <div className="mb-32 grid text-center lg:mb-0 lg:w-full lg:max-w-5xl lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Explore starter templates for Next.js.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-balance text-sm opacity-50">
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
+      {/* Footer */}
+      <footer className="bg-black text-white p-4 text-center border-t-4 border-red-700 mt-8">
+        <p>© 1987 CRYPTOWEATHER NEXUS | THE FUTURE IS NOW</p>
+        <p className="text-xs mt-2">Printed with 🖨️ in New York, NY</p>
+      </footer>
+    </div>
   );
 }

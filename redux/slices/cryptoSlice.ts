@@ -1,70 +1,81 @@
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+// redux/slices/cryptoSlice.ts
+import { createAsyncThunk, createSlice } from '@reduxjs/toolkit';
 import axios from 'axios';
 
 interface CryptoData {
   id: string;
   name: string;
   symbol: string;
-  price: number;
-  change24h: number;
-  marketCap: number;
-  timestamp: number;
+  image: string;
+  current_price: number;
+  price_change_percentage_24h: number;
+  market_cap: number;
+  market_cap_rank: number;
+  total_volume: number;
+  last_updated: string;
 }
 
 interface CryptoState {
-  data: Record<string, CryptoData>;
+  data: {
+    [id: string]: CryptoData;
+  };
   loading: boolean;
   error: string | null;
-  wsConnected: boolean;
 }
 
 const initialState: CryptoState = {
   data: {},
   loading: false,
   error: null,
-  wsConnected: false,
 };
 
 export const fetchCrypto = createAsyncThunk(
-  'crypto/fetchCrypto',
-  async (id: string) => {
-    const response = await axios.get(
-      `https://api.coingecko.com/api/v3/coins/${id}?x_cg_demo_api_key=${process.env.NEXT_PUBLIC_COINGECKO_API_KEY}&localization=false&tickers=false&market_data=true&community_data=false&developer_data=false&sparkline=false`
-    );
+  'crypto/fetchData',
+  async (coinIds: string[], { rejectWithValue }) => {
+    try {
+      const response = await axios.get(
+        `https://api.coingecko.com/api/v3/coins/markets`,
+        {
+          params: {
+            vs_currency: 'usd',
+            ids: coinIds.join(','),
+            order: 'market_cap_desc',
+            sparkline: false,
+          },
+          timeout: 5000,
+        }
+      );
 
-    return {
-      id: response.data.id,
-      name: response.data.name,
-      symbol: response.data.symbol.toUpperCase(),
-      price: response.data.market_data.current_price.usd,
-      change24h: response.data.market_data.price_change_percentage_24h,
-      marketCap: response.data.market_data.market_cap.usd,
-      timestamp: Date.now(),
-    };
+      return response.data.reduce((acc: any, coin: any) => {
+        acc[coin.id] = {
+          id: coin.id,
+          name: coin.name,
+          symbol: coin.symbol,
+          image: coin.image,
+          current_price: coin.current_price,
+          price_change_percentage_24h: coin.price_change_percentage_24h,
+          market_cap: coin.market_cap,
+          market_cap_rank: coin.market_cap_rank,
+          total_volume: coin.total_volume,
+          last_updated: coin.last_updated,
+        };
+        return acc;
+      }, {});
+    } catch (error: any) {
+      console.error('Crypto API Error:', {
+        message: error.message,
+        status: error.response?.status,
+        data: error.response?.data,
+      });
+      return rejectWithValue(error.response?.data?.error || error.message);
+    }
   }
 );
 
 const cryptoSlice = createSlice({
   name: 'crypto',
   initialState,
-  reducers: {
-    setWsConnected: (state, action: PayloadAction<boolean>) => {
-      state.wsConnected = action.payload;
-    },
-    updateCryptoPrice: (state, action: PayloadAction<{ id: string; price: number; timestamp: number }>) => {
-      const { id, price, timestamp } = action.payload;
-      if (state.data[id]) {
-        const oldPrice = state.data[id].price;
-        const change24h = ((price - oldPrice) / oldPrice) * 100;
-        state.data[id] = {
-          ...state.data[id],
-          price,
-          change24h,
-          timestamp,
-        };
-      }
-    },
-  },
+  reducers: {},
   extraReducers: (builder) => {
     builder
       .addCase(fetchCrypto.pending, (state) => {
@@ -73,14 +84,13 @@ const cryptoSlice = createSlice({
       })
       .addCase(fetchCrypto.fulfilled, (state, action) => {
         state.loading = false;
-        state.data[action.payload.id] = action.payload;
+        state.data = action.payload;
       })
       .addCase(fetchCrypto.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.error.message || 'Failed to fetch crypto data';
+        state.error = action.payload as string;
       });
   },
 });
 
-export const { setWsConnected, updateCryptoPrice } = cryptoSlice.actions;
-export default cryptoSlice.reducer; 
+export default cryptoSlice.reducer;
